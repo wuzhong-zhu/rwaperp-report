@@ -159,7 +159,7 @@
           const value=oi!=null&&price!=null&&Number.isFinite(oi*price)?oi*price:null;
           return {...r,oi,price,value};
         }).sort((a,b)=>(b.value??-1)-(a.value??-1));
-        $('market-oi-status').textContent=`当前快照 · ${rows.length} 个合约 · 获取于 ${new Date().toISOString()} · broker 筛选口径待确认`;
+        $('market-oi-status').textContent=`当前快照 · ${rows.length} 个合约 · 获取于 ${new Date().toISOString()} · 市场整体 OI，非 RWA Perp 专属持仓`;
         $('market-oi-rows').replaceChildren(...rows.map(r=>{
           const tr=document.createElement('tr');
           for(const v of [r.symbol??'—',r.broker_id??'—',fmt(r.oi),fmt(r.price),fmt(r.value)]){
