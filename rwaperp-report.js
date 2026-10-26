@@ -141,10 +141,9 @@
     for(const id of ['load','range','start','end'])$(id).disabled=true;
     $('rwa-totals').replaceChildren();$('oi-summary').replaceChildren();$('oi-rows').replaceChildren();$('oi-status').textContent='加载中…';
     $('market-oi-rows').replaceChildren();$('market-oi-status').textContent='加载中…';
-    $('broker-oi-rows').replaceChildren();$('broker-oi-status').textContent='加载中…';
     const q=new URLSearchParams({broker_id:BROKER,start_date:start,end_date:end});
     try {
-      const results=await Promise.allSettled([fetchJSON('dashboard/orderly/by-broker?'+q),fetchJSON('dashboard/fund-flows/by-broker?'+q),fetchJSON('metrics/dex-users'),fetchJSON('https://api.orderly.org/md/volume/builder/daily_stats?broker_id='+BROKER),fetchJSON('https://api.orderly.org/md/volume/builder/daily_stats?broker_id='+BROKER+'&market=RWA'),fetchJSON('https://api.orderly.org/md/cmc/contracts?broker_id='+BROKER),fetchJSON('https://api.orderly.org/md/coingecko/contracts'),fetchJSON('https://api.orderly.org/v1/public/futures_market?broker_id='+BROKER+'&symbol=PERP_BTC_USDC'),fetchJSON('https://api.orderly.org/v1/public/futures_market?symbol=PERP_BTC_USDC')]);
+      const results=await Promise.allSettled([fetchJSON('dashboard/orderly/by-broker?'+q),fetchJSON('dashboard/fund-flows/by-broker?'+q),fetchJSON('metrics/dex-users'),fetchJSON('https://api.orderly.org/md/volume/builder/daily_stats?broker_id='+BROKER),fetchJSON('https://api.orderly.org/md/volume/builder/daily_stats?broker_id='+BROKER+'&market=RWA'),fetchJSON('https://api.orderly.org/md/cmc/contracts?broker_id='+BROKER),fetchJSON('https://api.orderly.org/md/coingecko/contracts')]);
       const errors=[];let trading=null,flows=null;
       for(const [i,name] of [[0,'成交'],[1,'资金']]){
         try {const map=series(results[i]);if(results[i].status==='rejected')throw results[i].reason;if(i===0)trading=map;else flows=map;}catch(err){errors.push(name+'：'+err.message);}
@@ -158,30 +157,16 @@
         const rows=[...market.value].sort((a,b)=>(nonnegative(b.open_interest_usd)??-1)-(nonnegative(a.open_interest_usd)??-1));
         $('market-oi-status').textContent=`当前市场快照 · ${rows.length} 个合约 · 获取于 ${new Date().toISOString()}`;
         $('market-oi-rows').replaceChildren(...rows.map(r=>{
-          const bid=num(r.bid),ask=num(r.ask);
-          const spread=bid>0&&ask>=bid?(ask-bid)/((ask+bid)/2)*10000:null;
-          const rate=num(r.funding_rate),next=num(r.next_funding_rate);
           const tr=document.createElement('tr');
-          for(const v of [r.ticker_id??'—',precise(nonnegative(r.open_interest)),fmt(nonnegative(r.open_interest_usd)),precise(nonnegative(r.last_price)),fmt(nonnegative(r.target_volume)),fmt(spread),precise(rate==null?null:rate*100),fmt(nonnegative(r.funding_interval_minutes)),precise(next==null?null:next*100)]){
+          for(const v of [r.ticker_id??'—',precise(nonnegative(r.open_interest)),fmt(nonnegative(r.open_interest_usd))]){
             const td=document.createElement('td');td.textContent=v;tr.append(td);
           }
           return tr;
         }));
       }else{
-        $('market-oi-status').textContent='CoinGecko 市场行情不可用，请稍后重试。';
-        errors.push('CoinGecko 市场行情加载失败或无记录');
+        $('market-oi-status').textContent='CoinGecko 市场 OI不可用，请稍后重试。';
+        errors.push('CoinGecko 市场 OI加载失败或无记录');
       }
-      const btc=results.slice(7,9).map(result=>result.status==='fulfilled'&&Array.isArray(result.value.data?.rows)?result.value.data.rows.find(r=>r.symbol==='PERP_BTC_USDC'):null);
-      $('broker-oi-rows').replaceChildren(...btc.map((r,i)=>{
-        const tr=document.createElement('tr');
-        for(const v of [i===0?'rwaperp_xyz（OI 可能回退市场值）':'全市场',precise(nonnegative(r?.open_interest)),precise(nonnegative(r?.['24h_volume'])),fmt(nonnegative(r?.['24h_amount']))]){
-          const td=document.createElement('td');td.textContent=v;tr.append(td);
-        }
-        return tr;
-      }));
-      const brokerOI=nonnegative(btc[0]?.open_interest),marketOI=nonnegative(btc[1]?.open_interest);
-      $('broker-oi-status').textContent=brokerOI==null||marketOI==null?'部分 OI 数据缺失，无法比较。':brokerOI===marketOI?'两次请求 OI 相同；无法据此区分 broker 数据与市场回退值。':'两次请求 OI 不同；请求时点可能不同，且接口无回退标记，仍不能保证为 broker 专属 OI。';
-      if(btc.some(r=>!r))errors.push('BTC broker / 市场对照部分加载失败');
       const oi=results[5];
       if(oi.status==='fulfilled'&&Array.isArray(oi.value)&&oi.value.length){
         const data=oi.value,valid=data.every(r=>num(r.open_interest_usd)!=null&&num(r.open_interest)!=null&&num(r.open_interest_usd)>=0);
