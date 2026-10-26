@@ -140,15 +140,37 @@
     $('status').textContent='正在读取成交、资金与用户数据…';$('status').className='status';$('export').disabled=true;
     for(const id of ['load','range','start','end'])$(id).disabled=true;
     $('rwa-totals').replaceChildren();$('oi-summary').replaceChildren();$('oi-rows').replaceChildren();$('oi-status').textContent='加载中…';
+    $('market-oi-rows').replaceChildren();$('market-oi-status').textContent='加载中…';
     const q=new URLSearchParams({broker_id:BROKER,start_date:start,end_date:end});
     try {
-      const results=await Promise.allSettled([fetchJSON('dashboard/orderly/by-broker?'+q),fetchJSON('dashboard/fund-flows/by-broker?'+q),fetchJSON('metrics/dex-users'),fetchJSON('https://api.orderly.org/md/volume/builder/daily_stats?broker_id='+BROKER),fetchJSON('https://api.orderly.org/md/volume/builder/daily_stats?broker_id='+BROKER+'&market=RWA'),fetchJSON('https://api.orderly.org/md/cmc/contracts?broker_id='+BROKER)]);
+      const results=await Promise.allSettled([fetchJSON('dashboard/orderly/by-broker?'+q),fetchJSON('dashboard/fund-flows/by-broker?'+q),fetchJSON('metrics/dex-users'),fetchJSON('https://api.orderly.org/md/volume/builder/daily_stats?broker_id='+BROKER),fetchJSON('https://api.orderly.org/md/volume/builder/daily_stats?broker_id='+BROKER+'&market=RWA'),fetchJSON('https://api.orderly.org/md/cmc/contracts?broker_id='+BROKER),fetchJSON('https://api.orderly.org/v1/public/futures_market?broker_id='+BROKER)]);
       const errors=[];let trading=null,flows=null;
       for(const [i,name] of [[0,'成交'],[1,'资金']]){
         try {const map=series(results[i]);if(results[i].status==='rejected')throw results[i].reason;if(i===0)trading=map;else flows=map;}catch(err){errors.push(name+'：'+err.message);}
       }
       let md=null,rwa=null;
       for(const [i,name] of [[3,'MD 总体'],[4,'MD RWA']]){try{if(results[i].status==='rejected')throw results[i].reason;const map=series(results[i],true);if(i===3)md=map;else rwa=map;}catch(err){errors.push(name+'：'+err.message);}}
+      const market=results[6];
+      if(market.status==='fulfilled'&&Array.isArray(market.value.data?.rows)&&market.value.data.rows.length){
+        const rows=market.value.data.rows.map(r=>{
+          const rawOI=num(r.open_interest),rawPrice=num(r.mark_price);
+          const oi=rawOI!=null&&rawOI>=0?rawOI:null;
+          const price=rawPrice!=null&&rawPrice>0?rawPrice:null;
+          const value=oi!=null&&price!=null&&Number.isFinite(oi*price)?oi*price:null;
+          return {...r,oi,price,value};
+        }).sort((a,b)=>(b.value??-1)-(a.value??-1));
+        $('market-oi-status').textContent=`当前快照 · ${rows.length} 个合约 · 获取于 ${new Date().toISOString()} · broker 筛选口径待确认`;
+        $('market-oi-rows').replaceChildren(...rows.map(r=>{
+          const tr=document.createElement('tr');
+          for(const v of [r.symbol??'—',r.broker_id??'—',fmt(r.oi),fmt(r.price),fmt(r.value)]){
+            const td=document.createElement('td');td.textContent=v;tr.append(td);
+          }
+          return tr;
+        }));
+      }else{
+        $('market-oi-status').textContent='Futures Market OI 数据不可用，请稍后重试。';
+        errors.push('Futures Market OI 加载失败或无记录');
+      }
       const oi=results[5];
       if(oi.status==='fulfilled'&&Array.isArray(oi.value)&&oi.value.length){
         const data=oi.value,valid=data.every(r=>num(r.open_interest_usd)!=null&&num(r.open_interest)!=null&&num(r.open_interest_usd)>=0);
